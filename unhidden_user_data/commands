@@ -1,0 +1,4 @@
+freqtrade download-data --timerange 20190101- -t 15m
+freqtrade hyperopt --timerange 20190101- --hyperopt ScalpHyperOpt --hyperopt-loss ScalpHyperOptLoss -e 500 --spaces buy sell stoploss --strategy ScalpStrategy
+freqtrade backtesting --timerange 20190101- --timeframe 15m --strategy ScalpStrategy --export trades
+freqtrade plot-dataframe --strategy ScalpStrategy -p ETH/USDT --timerange=20190101- -i 15m
