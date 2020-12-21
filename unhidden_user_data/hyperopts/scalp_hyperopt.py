@@ -6,6 +6,8 @@ from typing import Any, Callable, Dict, List
 
 import numpy as np  # noqa
 import pandas as pd  # noqa
+from freqtrade.utils.indicators import ccistc, t3cci
+from freqtrade.utils.hyperopt_helpers import indicator_space_generator, trend_conditions_generator
 from pandas import DataFrame
 from skopt.space import Categorical, Dimension, Integer, Real  # noqa
 
@@ -17,6 +19,12 @@ from finta import TA
 import talib.abstract as ta  # noqa
 import freqtrade.vendor.qtpylib.indicators as qtpylib
 
+shortRangeBegin = 50
+shortRangeEnd = 600
+mediumRangeBegin = 100
+mediumRangeEnd = 1000
+rsiBegin = 50
+rsiEnd = 300
 
 class ScalpHyperOpt(IHyperOpt):
     """
@@ -45,8 +53,17 @@ class ScalpHyperOpt(IHyperOpt):
         """
         This method can also be loaded from the strategy, if it doesn't exist in the hyperopt class.
         """
+        dataframe['stc'] = ccistc(dataframe, 10)
+        dataframe['t3cci'] = t3cci(dataframe)
         dataframe['cci'] = ta.CCI(dataframe)
-        dataframe['stc'] = TA.STC(dataframe)
+        # for rsi in range(rsiBegin, rsiEnd + 1):
+        #     dataframe[f'rsi({rsi})'] = ta.RSI(dataframe, timeperiod=rsi)
+        #
+        # for short in range(shortRangeBegin, shortRangeEnd + 1):
+        #     dataframe[f'maShort({short})'] = ta.SMA(dataframe, timeperiod=short)
+        #
+        # for medium in range(mediumRangeBegin, mediumRangeEnd + 1):
+        #     dataframe[f'maMedium({medium})'] = ta.SMA(dataframe, timeperiod=medium)
 
         return dataframe
 
@@ -59,37 +76,10 @@ class ScalpHyperOpt(IHyperOpt):
             """
             Buy strategy Hyperopt will build and use
             """
-            conditions = []
-            if 'cci-enabled' in params and params['cci-enabled']:
-                conditions.append(dataframe['cci'] < params['cci-value'])
-            if 'stc-enabled' in params and params['stc-enabled']:
-                conditions.append(dataframe['stc'] < params['stc-value'])
-
-            if 'trigger' in params:
-                if params['trigger'] == 'cci-above':
-                    conditions.append(
-                        qtpylib.crossed_above(
-                            dataframe['cci'], params['cci-above-trigger-value']
-                        )
-                    )
-                if params['trigger'] == 'stc-above':
-                    conditions.append(
-                        qtpylib.crossed_above(
-                            dataframe['stc'], params['stc-above-trigger-value']
-                        )
-                    )
-                if params['trigger'] == 'cci-below':
-                    conditions.append(
-                        qtpylib.crossed_below(
-                            dataframe['cci'], params['cci-below-trigger-value']
-                        )
-                    )
-                if params['trigger'] == 'stc-below':
-                    conditions.append(
-                        qtpylib.crossed_below(
-                            dataframe['stc'], params['stc-below-trigger-value']
-                        )
-                    )
+            conditions = trend_conditions_generator(['cci', 'stc', 't3cci'], dataframe, params)
+            # print(trend_conditions_generator(['cci', 'stc', 't3cci'], dataframe, params))
+            # conditions.append(dataframe[f"maShort({params['short_ma']})"] > dataframe[f"maMedium({params['medium_ma']})"])
+            # conditions.append(dataframe[f"rsi({params['rsi_period']})"] < params['rsi'])
 
             # Check that volume is not 0
             conditions.append(dataframe['volume'] > 0)
@@ -108,17 +98,15 @@ class ScalpHyperOpt(IHyperOpt):
         """
         Define your Hyperopt space for searching strategy parameters
         """
-        return [
-            Integer(-400, -100, name='cci-value'),
-            Integer(5, 25, name='stc-value'),
-            Integer(-400, -100, name='cci-above-trigger-value'),
-            Integer(5, 25, name='stc-above-trigger-value'),
-            Integer(-400, -100, name='cci-below-trigger-value'),
-            Integer(5, 25, name='stc-below-trigger-value'),
-            Categorical([True, False], name='cci-enabled'),
-            Categorical([True, False], name='stc-enabled'),
-            Categorical(['cci-above', 'stc-above', 'cci-below', 'stc-below'], name='trigger')
-        ]
+
+        statements = indicator_space_generator({ 'cci': [-400, -100], 'stc': [0, 25], 't3cci': [-200, 0] })
+        return statements
+        # return [
+            # Integer(shortRangeBegin, shortRangeEnd, name='short_ma'),
+            # Integer(mediumRangeBegin, mediumRangeEnd, name='medium_ma'),
+            # Integer(0, 100, name='rsi'),
+            # Integer(rsiBegin, rsiEnd, name='rsi_period')
+        # ]
 
     @staticmethod
     def sell_strategy_generator(params: Dict[str, Any]) -> Callable:
@@ -130,37 +118,7 @@ class ScalpHyperOpt(IHyperOpt):
             Sell strategy Hyperopt will build and use
             """
             # print(params)
-            conditions = []
-            if 'sell-cci-enabled' in params and params['sell-cci-enabled']:
-                conditions.append(dataframe['cci'] > params['sell-cci-value'])
-            if 'sell-stc-enabled' in params and params['sell-stc-enabled']:
-                conditions.append(dataframe['stc'] > params['sell-stc-value'])
-
-            if 'sell-trigger' in params:
-                if params['sell-trigger'] == 'sell-cci-above':
-                    conditions.append(
-                        qtpylib.crossed_above(
-                            dataframe['cci'], params['sell-cci-above-trigger-value']
-                        )
-                    )
-                if params['sell-trigger'] == 'sell-stc-above':
-                    conditions.append(
-                        qtpylib.crossed_above(
-                            dataframe['stc'], params['sell-stc-above-trigger-value']
-                        )
-                    )
-                if params['sell-trigger'] == 'sell-cci-below':
-                    conditions.append(
-                        qtpylib.crossed_below(
-                            dataframe['cci'], params['sell-cci-below-trigger-value']
-                        )
-                    )
-                if params['sell-trigger'] == 'sell-stc-below':
-                    conditions.append(
-                        qtpylib.crossed_below(
-                            dataframe['stc'], params['sell-stc-below-trigger-value']
-                        )
-                    )
+            conditions = trend_conditions_generator(['cci', 'stc', 't3cci'], dataframe, params, True)
 
             # Check that volume is not 0
             conditions.append(dataframe['volume'] > 0)
@@ -179,17 +137,8 @@ class ScalpHyperOpt(IHyperOpt):
         """
         Define your Hyperopt space for searching sell strategy parameters
         """
-        return [
-            Integer(100, 400, name='sell-cci-value'),
-            Integer(75, 100, name='sell-stc-value'),
-            Integer(100, 400, name='sell-cci-above-trigger-value'),
-            Integer(75, 100, name='sell-stc-above-trigger-value'),
-            Integer(100, 400, name='sell-cci-below-trigger-value'),
-            Integer(75, 100, name='sell-stc-below-trigger-value'),
-            Categorical([True, False], name='sell-cci-enabled'),
-            Categorical([True, False], name='sell-stc-enabled'),
-            Categorical(['sell-cci-above', 'sell-stc-above', 'sell-cci-below', 'sell-stc-below'], name='sell-trigger')
-        ]
+        statements = indicator_space_generator({ 'cci': [100, 400], 'stc': [75, 100], 't3cci': [0, 200] }, True)
+        return statements
 
     @staticmethod
     def generate_roi_table(params: Dict) -> Dict[int, float]:
@@ -241,7 +190,7 @@ class ScalpHyperOpt(IHyperOpt):
         'stoploss' optimization hyperspace.
         """
         return [
-            Real(-1, -0.02, name='stoploss'),
+            Real(-0.05, -0.005, name='stoploss'),
         ]
 
     @staticmethod
@@ -282,14 +231,21 @@ class ScalpHyperOpt(IHyperOpt):
         """
         dataframe.loc[
             (
-                (dataframe['cci'] < -100) &
-                (dataframe['stc'] < 25)
+                (
+                    (qtpylib.crossed_above(dataframe['stc'], 25)) |
+                    (qtpylib.crossed_above(dataframe['stc'].shift(1), 25))
+                ) &
+                (
+                    (qtpylib.crossed_above(dataframe['cci'], 0)) |
+                    (qtpylib.crossed_above(dataframe['cci'].shift(1), 0))
+                )
+                & (dataframe['sma_short'] > dataframe['sma_long'])
             ),
             'buy'] = 1
 
         return dataframe
 
-    def populate_sell_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+    def populate_sell_trend(dataframe: DataFrame, metadata: dict) -> DataFrame:
         """
         Based on TA indicators.
         Can be a copy of the corresponding method from the strategy,
@@ -299,8 +255,9 @@ class ScalpHyperOpt(IHyperOpt):
         """
         dataframe.loc[
             (
-                (dataframe['cci'] > 100) &
-                (dataframe['stc'] > 75)
+                (qtpylib.crossed_below(dataframe['cci'], 81))
+                & (dataframe['stc'] > 84)
+                & (dataframe['cci'] > 162)
             ),
             'sell'] = 1
         return dataframe

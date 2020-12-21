@@ -10,7 +10,7 @@ from freqtrade.optimize.hyperopt import IHyperOptLoss
 
 # set TARGET_TRADES to suit your number concurrent trades so its realistic
 # to the number of days
-TARGET_TRADES = 500
+TARGET_TRADES = 400
 # This is assumed to be expected avg profit * expected trade count.
 # For example, for 0.35% avg per trade (or 0.0035 as ratio) and 1100 trades,
 # self.expected_max_profit = 3.85
@@ -20,7 +20,7 @@ EXPECTED_MAX_PROFIT = 3.0
 
 # max average trade duration in minutes
 # if eval ends with higher value, we consider it a failed eval
-MAX_ACCEPTED_TRADE_DURATION = 800
+MAX_ACCEPTED_TRADE_DURATION = 1500
 
 
 class ScalpHyperOptLoss(IHyperOptLoss):
@@ -60,5 +60,10 @@ class ScalpHyperOptLoss(IHyperOptLoss):
         else:
             trade_loss = 1000
 
-        result = losing_trade_count * 3 - winning_trade_count - (win_trade_profit * 100) + trade_loss + duration_loss
+        if (winning_trade_count / trade_count) > 0.55:
+            trade_ratio_loss = 0
+        else:
+            trade_ratio_loss = 1000
+
+        result = 0 - total_profit + trade_loss + duration_loss + trade_ratio_loss
         return result
